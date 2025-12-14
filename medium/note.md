@@ -1,0 +1,157 @@
+## 条件类型分发
+
+当一个对象为联合类型时，条件类型会分发，即会针对联合类型的每个成员进行类型判断。
+
+**一句话总规则（核心）**
+
+只有当「裸的类型参数」出现在 extends 左边时，才会对 union 分发
+
+```ts
+type A = T extends U ? A : B   // ✅ 分发
+```
+
+```ts
+type A = [X] extends [U] ? A : B   // ❌ 不分发
+```
+### 一、✅ 会分发（Distributive）
+
+**1️⃣ 裸 T 在 extends 左侧（最常见）**
+
+```ts
+type D<T> = T extends string ? 1 : 2
+```
+
+`D<'a' | 1>`
+→ `D<'a'> | D<1>`
+→ `1 | 2`
+
+---
+
+**2️⃣ T extends any / unknown**
+
+```ts
+type D<T> = T extends unknown ? T[] : never
+```
+
+---
+
+`D<string | number>`
+→ `string[] | number[]`
+
+📌 any / unknown **只是为了触发分发**
+
+--- 
+
+**3️⃣ 多分支也照样分发**
+
+```ts
+type D<T> =
+  T extends string ? 's'
+  : T extends number ? 'n'
+  : 'o'
+```
+
+### 二、❌ 不会分发（Non-distributive）
+
+**4️⃣ T 被包了一层（99% 的坑）**
+
+```ts
+type ND<T> = [T] extends [string] ? 1 : 2
+```
+
+`ND<'a' | 1>`
+→ `2`        ❌ 不分发
+
+📌 一旦包进 tuple / object，就**失去分发性**
+
+---
+
+**5️⃣ keyof T extends ...**
+
+```ts
+type ND<T> = keyof T extends never ? 1 : 2
+```
+
+`ND<{a} | {b}>`
+→ `2`        ❌ 不分发
+
+👉 extends 左边已经不是 裸 T
+
+---
+
+**6️⃣ T[K] extends ...（属性级判断）**
+
+```ts
+type ND<T> = {
+  [K in keyof T]: T[K] extends string ? 1 : 2
+}
+```
+
+📌 映射类型里的 extends 不分发 union
+
+---
+
+**7️⃣ T & {} / T | {}**
+
+```ts
+type ND<T> = (T & {}) extends string ? 1 : 2
+```
+
+❌ 不分发
+👉 因为左边已经不是裸 `T`
+
+---
+
+### 三、强制「开 / 关」分发的技巧
+
+**✅ 强制开启分发（你在 DeepReadonly 里用的）**
+
+```ts
+type ForceDistribute<T> =
+  T extends unknown
+    ? ''/* 分发后的逻辑 */
+: never
+```
+
+**❌ 强制关闭分发（非常常用）**
+
+```ts
+type NoDistribute<T> =
+  [T] extends [any] ? '' /* 整体判断 */ : never
+```
+
+## keyof T extends never
+
+### 一、keyof T 到底表示什么？
+
+👉 判断 T「还有没有可以继续递归的结构」
+
+**keyof T = 类型 T 的所有可访问属性名的联合类型**
+
+```ts
+type A = keyof { a: number }        // 'a'
+type A = keyof { a: number, b: 1 }  // 'a' | 'b'
+type A = keyof [1, 2]               // '0' | '1' | 'length' | ...
+type A = keyof string[]             // number | 'length' | ...
+```
+
+### 二、什么时候 keyof T 是 never？
+
+| T                  | `keyof T` |
+| ------------------ | --------- |
+| `string`           | `never`   |
+| `number`           | `never`   |
+| `boolean`          | `never`   |
+| `bigint`           | `never`   |
+| `symbol`           | `never`   |
+| `null / undefined` | `never`   |
+| `'abc'`            | `never`   |
+| `true`             | `never`   |
+| `() => void`       | `never`   |
+
+
+### 三、所以 keyof T extends never 在干嘛？
+
+意思是：**如果 T 没有任何 key（不可再拆） → 递归终止**
+
+换成大白话就是：**🧠 “已经是叶子节点了，别再往下 Deep 了”**
