@@ -4,7 +4,8 @@
 
 **一句话总规则（核心）**
 
-只有当「裸的类型参数」出现在 extends 左边时，才会对 union 分发
+只有当「裸的类型参数」出现在 extends 左边时，才会对 union 分发 (Naked Type)
+👉 只要 T 原封不动站在 extends 左边，它就是裸的
 
 ```ts
 type A = T extends U ? A : B   // ✅ 分发
